@@ -93,6 +93,15 @@ def next_trading_day(start, holidays=None):
     return d
 
 
+def is_trading_day(day, cfg=None, holidays=None):
+    """某日是否为期货交易日：周一~周五 且 非法定休市日。
+    注：调休补班的周末期货市场仍休市，无需特殊处理。"""
+    if day.weekday() >= 5:
+        return False
+    holidays = holidays if holidays is not None else market_holidays(cfg)
+    return day.isoformat() not in holidays
+
+
 def is_pre_closure_day(today, holidays=None, min_gap=3):
     """今日是否为「周末/长假前最后一个交易日」：距下一交易日 >= min_gap 天（周末为 3 天）。"""
     return (next_trading_day(today, holidays) - today).days >= min_gap
