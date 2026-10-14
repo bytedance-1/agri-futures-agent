@@ -1,10 +1,8 @@
 name: daily-signal
 
-# 每日盘后信号生成：交易日 15:10（北京时间）= 07:10 UTC
-# GitHub Actions 的 cron 使用 UTC，北京时间 = UTC+8，且周一至周五（1-5）
+# 每日盘后信号已改由 TRAE 定时任务（模型参与分析）生成。
+# 此工作流保留为手动触发，仅作规则兜底/调试用。
 on:
-  schedule:
-    - cron: "10 7 * * 1-5"
   workflow_dispatch: {}   # 支持在 Actions 页面手动触发，便于测试
 
 permissions:
