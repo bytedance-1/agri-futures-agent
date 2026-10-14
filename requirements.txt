@@ -1,0 +1,5 @@
+# 本项目仅使用 Python 标准库（urllib / json / datetime 等），无需安装任何第三方依赖。
+# 如需本地运行，确保 Python >= 3.8 即可：
+#   python daily_signal.py
+#   python position_monitor.py
+#   python backtest.py

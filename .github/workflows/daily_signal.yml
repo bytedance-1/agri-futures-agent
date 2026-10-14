@@ -1,0 +1,47 @@
+name: daily-signal
+
+# 每日盘后信号生成：交易日 15:10（北京时间）= 07:10 UTC
+# GitHub Actions 的 cron 使用 UTC，北京时间 = UTC+8，且周一至周五（1-5）
+on:
+  schedule:
+    - cron: "10 7 * * 1-5"
+  workflow_dispatch: {}   # 支持在 Actions 页面手动触发，便于测试
+
+permissions:
+  contents: write          # 需要写权限把更新后的 position.json 提交回仓库
+
+concurrency:
+  group: daily-signal
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 运行信号脚本
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
+        run: python daily_signal.py
+
+      - name: 把持仓数据提交回仓库
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add position.json state.json
+          if git diff --cached --quiet; then
+            echo "无数据变化"
+          else
+            git commit -m "data: 更新持仓数据 [skip ci]"
+            git pull --rebase --autostash || true
+            git push
+          fi

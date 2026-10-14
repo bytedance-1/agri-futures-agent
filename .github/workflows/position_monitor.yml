@@ -1,0 +1,48 @@
+name: position-monitor
+
+# 持仓监控：交易日 9:30-15:00（北京时间）每 30 分钟一次 = 01:30-07:00 UTC，周一至周五
+# 两组 cron 合起来覆盖 01:30 / 02:00 / 02:30 / ... / 07:00（UTC）
+on:
+  schedule:
+    - cron: "30 1,2,3,4,5,6 * * 1-5"
+    - cron: "0 2,3,4,5,6,7 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: position-monitor
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 运行持仓监控
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          WECOM_WEBHOOK: ${{ secrets.WECOM_WEBHOOK }}
+        run: python position_monitor.py
+
+      - name: 把持仓数据提交回仓库
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add position.json state.json
+          if git diff --cached --quiet; then
+            echo "无数据变化"
+          else
+            git commit -m "data: 更新持仓数据 [skip ci]"
+            git pull --rebase --autostash || true
+            git push
+          fi

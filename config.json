@@ -1,0 +1,74 @@
+{
+  "money": {
+    "initial_capital": 10000,
+    "risk_per_trade": 0.05,
+    "max_risk_pct_hard": 0.08,
+    "max_margin_ratio": 0.40,
+    "margin_hard_ratio": 0.60,
+    "allow_min_one_lot": true,
+    "max_positions": 3,
+    "cooldown_days": 2
+  },
+  "correlation_groups": [
+    ["M", "RM"]
+  ],
+  "products": {
+    "M": {
+      "name": "豆粕",
+      "sina": "M0",
+      "exchange": "DCE",
+      "multiplier": 10,
+      "tick": 1.0,
+      "margin_rate": 0.10,
+      "commission": 2.5
+    },
+    "C": {
+      "name": "玉米",
+      "sina": "C0",
+      "exchange": "DCE",
+      "multiplier": 10,
+      "tick": 1.0,
+      "margin_rate": 0.10,
+      "commission": 2.0
+    },
+    "RM": {
+      "name": "菜粕",
+      "sina": "RM0",
+      "exchange": "CZCE",
+      "multiplier": 10,
+      "tick": 1.0,
+      "margin_rate": 0.10,
+      "commission": 2.5
+    }
+  },
+  "filters": {
+    "vol_ma_period": 20,
+    "vol_mult": 1.5,
+    "vol_pct_rank_min": 0.75,
+    "oi_ma_period": 20,
+    "oi_mult": 1.5,
+    "oi_abs_floor": 0.002,
+    "body_min_pct": 0.008,
+    "body_atr_ratio": 0.0,
+    "atr_period": 20,
+    "atr_ma_period": 20,
+    "atr_mult": 1.0,
+    "ma_period": 20,
+    "ma_slope_lookback": 5,
+    "require_ma_slope": false,
+    "require_ma60": false,
+    "ma60_period": 60,
+    "close_pos_min_long": 0.5,
+    "close_pos_max_short": 0.5,
+    "entry_buffer_ticks": 1
+  },
+  "exit": {
+    "stop_atr_mult": 1.5,
+    "tp1_atr_mult": 1.5,
+    "tp1_close_ratio": 0.6,
+    "tp2_atr_mult": 2.5,
+    "max_hold_days": 3,
+    "slippage_ticks": 1
+  },
+  "history_days": 160
+}
