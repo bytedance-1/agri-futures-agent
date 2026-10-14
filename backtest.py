@@ -186,8 +186,8 @@ def main():
     opt = {p: simulate(cfg, p, data[p]) for p in products}
     base = {p: simulate(baseline_cfg(cfg), p, data[p]) for p in products}
 
-    show("优化版（止损1.5ATR + ATR波动率门槛1.0 + 实体0.8% + 量能分位0.75）", opt)
-    show("原始版（止损1.2ATR + ATR门槛0.8 + 实体0.6%，无额外过滤）", base)
+    show("当前参数（config.json）", opt)
+    show("原始对照参数（更宽松的过滤/止损，仅作对比）", base)
 
 
 if __name__ == "__main__":

@@ -3,11 +3,11 @@
 daily_signal.py —— 每日盘后信号生成
 -----------------------------------
 运行时机：交易日 15:10（北京时间），周一到周五。
-流程：拉取 M/C/RM 日线 + 实时行情 -> 计算信号 -> 过滤/择优 -> 生成次日挂单计划
+流程：拉取全品种日线 + 实时行情 -> 计算信号 -> 过滤/择优 -> 生成次日挂单计划
      -> 写入 position.json（status=pending，表示“挂单待成交”）-> 推送微信表格。
 
 设计要点：
-- 数据源为“主力连续”合约（M0 / C0 / RM0），在新浪接口上即为拼接后的主力。
+- 数据源为“主力连续”合约（如 RB0 / M0 / SR0），在新浪接口上即为拼接后的主力。
 - 当日 K 线优先取日线接口；若日线尚未包含当日，则用实时行情合成当日 K 线。
 - 只生成“挂单计划”，不会自动下单（GitHub Actions 无法下单），
   需要你在交易软件里按推送的“条件单/停损单”参数自行挂单。
@@ -17,14 +17,8 @@ from __future__ import annotations
 import datetime as dt
 
 from common import (POSITION_PATH, STATE_PATH, build_signal, fetch_daily,
-                    fetch_realtime, load_config, load_json, push, save_json)
-
-
-def next_weekday(d):
-    while True:
-        d += dt.timedelta(days=1)
-        if d.weekday() < 5:
-            return d
+                    fetch_realtime, load_config, load_json, market_holidays,
+                    next_trading_day, push, save_json)
 
 
 def dir_cn(direction):
@@ -46,7 +40,8 @@ def main():
         return
     today = list(rt.values())[0]["date"]
     today_d = dt.date.fromisoformat(today)
-    plan_date = next_weekday(today_d).isoformat()
+    holidays = market_holidays(cfg, today_d)
+    plan_date = next_trading_day(today_d, holidays).isoformat()
 
     active = [p for p in positions if p.get("status") in ("pending", "open")]
     held = {p["product"] for p in active}
@@ -147,7 +142,7 @@ def main():
     save_json(STATE_PATH, state)
 
     md = build_markdown(cfg, today, plan_date, results, selected, active)
-    title = "【农产品期货】盘后信号 {} 生成{}条挂单".format(today, len(selected))
+    title = "【期货组合】盘后信号 {} 生成{}条挂单".format(today, len(selected))
     push(title, md, cfg)
     print(md)
 

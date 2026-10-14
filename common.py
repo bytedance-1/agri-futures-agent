@@ -59,6 +59,46 @@ def beijing_now():
 
 
 # ============================================================
+# 交易日历（周末 + 法定休市日）
+# ============================================================
+def _fetch_holiday_year(year):
+    """在线获取某年法定休市日（holiday=true 为放假休市）。失败返回空集合。"""
+    out = set()
+    try:
+        txt = http_get("https://timor.tech/api/holiday/year/{}".format(year),
+                       timeout=12, retries=2)
+        data = json.loads(txt)
+        for _k, v in (data.get("holiday") or {}).items():
+            if v.get("holiday"):
+                out.add(v["date"])
+    except Exception:
+        pass
+    return out
+
+
+def market_holidays(cfg, around=None):
+    """法定休市日集合：在线获取今年/明年（自动更新），失败时回退 config['holidays']。"""
+    base = set((cfg or {}).get("holidays", []))
+    y = (around or beijing_now().date()).year
+    base |= _fetch_holiday_year(y) | _fetch_holiday_year(y + 1)
+    return base
+
+
+def next_trading_day(start, holidays=None):
+    """start 之后的下一个交易日（跳过周末与法定休市日）。"""
+    holidays = holidays or set()
+    d = start + dt.timedelta(days=1)
+    while d.weekday() >= 5 or d.isoformat() in holidays:
+        d += dt.timedelta(days=1)
+    return d
+
+
+def is_pre_closure_day(today, holidays=None, min_gap=3):
+    """今日是否为「周末/长假前最后一个交易日」：距下一交易日 >= min_gap 天（周末为 3 天）。"""
+    return (next_trading_day(today, holidays) - today).days >= min_gap
+
+
+# ============================================================
 # HTTP（标准库，自动走环境变量代理）
 # ============================================================
 def http_get(url, headers=None, timeout=20, encoding="utf-8", retries=3):

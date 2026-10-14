@@ -12,6 +12,8 @@ position_monitor.py —— 持仓监控
 3. 第一止盈触发（>=2手：减仓 60% + 止损上移保本；1手：止损上移保本并继续持有）
 4. 第二止盈触发（全部平仓）
 5. 持仓满 N 个交易日到期平仓
+6. 周末/长假前强制平仓（持仓不过周末/节假日：在当日 14:30 后，若距下一交易日 >= 3 天，
+   则市价平掉所有持仓，并撤销当日未成交挂单）
 
 说明：为避免“滑点/先后顺序”无法还原导致的失真，本脚本采用保守判定：
 - 已隔日持有的仓位：用当日最高/最低价判定是否触发（真实条件单会成交）；
@@ -23,7 +25,8 @@ import math
 import datetime as dt
 
 from common import (POSITION_PATH, STATE_PATH, beijing_now, fetch_daily,
-                    fetch_realtime, load_config, load_json, push, save_json)
+                    fetch_realtime, is_pre_closure_day, load_config, load_json,
+                    market_holidays, push, save_json)
 
 
 def dir_cn(d):
@@ -65,6 +68,13 @@ def main():
         print("未获取到实时行情，退出")
         return
 
+    today = list(rt.values())[0]["date"]
+    today_d = dt.date.fromisoformat(today)
+    holidays = market_holidays(cfg, today_d)
+    flatten_now = (cfg.get("flatten_before_holiday", True)
+                   and is_pre_closure_day(today_d, holidays)
+                   and beijing_now().strftime("%H:%M") >= cfg.get("flatten_time", "14:30"))
+
     events = []
     keep = []
     changed = False
@@ -85,6 +95,14 @@ def main():
 
         # ---------------- 挂单待成交 ----------------
         if p["status"] == "pending":
+            if flatten_now and p["plan_date"] == today:
+                events.append({
+                    "product": p["name"], "direction": dir_cn(direction),
+                    "action": "节前撤单", "price": q["last"], "pnl": 0.0,
+                    "advice": "今日为周末/长假前最后一个交易日，撤销尚未成交的挂单，不新开仓。",
+                })
+                changed = True
+                continue  # 删除该挂单
             if today > p["plan_date"]:
                 events.append({
                     "product": p["name"], "direction": dir_cn(direction),
@@ -122,6 +140,17 @@ def main():
         lo = q["low"] if use_range else q["last"]
         cur = q["last"]
         lots_open = int(p.get("lots_open", p["lots"]))
+
+        # 周末/长假前强制平仓（持仓不过周末/节假日）
+        if flatten_now:
+            pnl = pnl_of(direction, p["entry_price"], cur, mult, lots_open)
+            events.append({
+                "product": p["name"], "direction": dir_cn(direction),
+                "action": "周末/节前强平", "price": cur, "pnl": pnl,
+                "advice": "今日为周末/长假前最后一个交易日，按市价强制平仓，持仓不过周末/节假日。",
+            })
+            changed = True
+            continue  # 删除持仓
 
         if direction == "long":
             stop_hit = lo <= p["stop_loss"]
@@ -209,7 +238,7 @@ def main():
 
     if events:
         md = build_markdown(events, keep, rt, cfg)
-        title = "【农产品期货】持仓提醒 {} 项".format(len(events))
+        title = "【期货组合】持仓提醒 {} 项".format(len(events))
         push(title, md, cfg)
         print(md)
     else:
