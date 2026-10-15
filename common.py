@@ -417,9 +417,22 @@ def build_signal(cfg, product, bars):
 # ============================================================
 # 微信推送（多通道）
 # ============================================================
+def _read_secret_file(path):
+    """读取密钥文件（去除首尾空白）。文件不存在或读取失败返回空串。"""
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception:
+        pass
+    return ""
+
+
 def _channels(cfg):
     ch = []
-    key = os.environ.get("SERVERCHAN_SENDKEY", "").strip()
+    # Server酱³：优先环境变量，其次本地 .serverchan_key 文件
+    key = os.environ.get("SERVERCHAN_SENDKEY", "").strip() \
+        or _read_secret_file(os.path.join(ROOT, ".serverchan_key"))
     if key:
         ch.append(("Server酱³", key))
     tok = os.environ.get("PUSHPLUS_TOKEN", "").strip()
