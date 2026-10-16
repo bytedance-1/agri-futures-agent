@@ -444,6 +444,18 @@ def _channels(cfg):
     return ch
 
 
+def _check_api(resp, name):
+    """校验推送接口返回码；非成功则抛异常，避免“未送达却报成功”。"""
+    try:
+        r = json.loads(resp)
+    except Exception:
+        return
+    code = r.get("code", r.get("errcode", 0))
+    if code not in (0, None):
+        msg = r.get("message") or r.get("errmsg") or r.get("data") or ""
+        raise RuntimeError("接口返回 code={} {}".format(code, msg))
+
+
 def push(title, markdown, cfg=None):
     cfg = cfg or load_config()
     ch = _channels(cfg)
@@ -459,15 +471,18 @@ def push(title, markdown, cfg=None):
     for name, val in ch:
         try:
             if name == "Server酱³":
-                http_post("https://sctapi.ftqq.com/{}.send".format(val),
-                          form={"title": title[:100], "desp": markdown})
+                resp = http_post("https://sctapi.ftqq.com/{}.send".format(val),
+                                 form={"title": title[:100], "desp": markdown})
+                _check_api(resp, name)
             elif name == "PushPlus":
-                http_post("https://www.pushplus.plus/send",
-                          json_body={"token": val, "title": title,
-                                     "content": markdown, "template": "markdown"})
+                resp = http_post("https://www.pushplus.plus/send",
+                                 json_body={"token": val, "title": title,
+                                            "content": markdown, "template": "markdown"})
+                _check_api(resp, name)
             elif name == "企业微信":
-                http_post(val, json_body={"msgtype": "markdown",
-                                          "markdown": {"content": "**{}**\n{}".format(title, markdown)}})
+                resp = http_post(val, json_body={"msgtype": "markdown",
+                                                 "markdown": {"content": "**{}**\n{}".format(title, markdown)}})
+                _check_api(resp, name)
             print("[push] {} 已发送".format(name))
             ok = True
         except Exception as e:  # noqa
