@@ -1,1 +1,64 @@
-[]
+[
+  {
+    "id": "AP-20261016-S",
+    "product": "AP",
+    "name": "苹果",
+    "direction": "short",
+    "status": "pending",
+    "plan_date": "2026-10-19",
+    "entry_price": 5991,
+    "lots": 1,
+    "lots_open": 1,
+    "stop_loss": 6148,
+    "initial_stop": 6148,
+    "tp1": 5743,
+    "tp2": 5577,
+    "tp1_done": false,
+    "atr": 165.49,
+    "multiplier": 10,
+    "margin_per_lot": 7189.2,
+    "risk_per_lot": 1580.0,
+    "created_date": "2026-10-16",
+    "signal": {
+      "vol_ratio": 1.92,
+      "vol_rank": 0.98,
+      "oi_delta": 8411.0,
+      "body_pct": 2.03,
+      "close_pos": 0.03,
+      "ma20": 6937.4,
+      "ma60": 7409.0
+    },
+    "note": "强空头趋势+极端放量(量分位0.98)+增仓大跌，大实体收最低位；原1.5ATR止损过宽超8%风险硬上限，收紧至0.95ATR控制单笔风险"
+  },
+  {
+    "id": "MA-20261016-L",
+    "product": "MA",
+    "name": "甲醇",
+    "direction": "long",
+    "status": "pending",
+    "plan_date": "2026-10-19",
+    "entry_price": 3224,
+    "lots": 1,
+    "lots_open": 1,
+    "stop_loss": 3106,
+    "initial_stop": 3106,
+    "tp1": 3401,
+    "tp2": 3519,
+    "tp1_done": false,
+    "atr": 117.83,
+    "multiplier": 10,
+    "margin_per_lot": 3868.8,
+    "risk_per_lot": 1190.0,
+    "created_date": "2026-10-16",
+    "signal": {
+      "vol_ratio": 1.45,
+      "vol_rank": 0.72,
+      "oi_delta": 31510.0,
+      "body_pct": 0.63,
+      "close_pos": 0.6,
+      "ma20": 3060.9,
+      "ma60": 2897.03
+    },
+    "note": "收盘站上MA20/MA60且增仓上涨，趋势反转信号；MA20斜率仍负为反转初期，收紧止损至1.0ATR验证突破有效性"
+  }
+]
