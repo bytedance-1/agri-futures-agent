@@ -18,6 +18,8 @@ position_monitor.py —— 持仓监控
 说明：为避免“滑点/先后顺序”无法还原导致的失真，本脚本采用保守判定：
 - 已隔日持有的仓位：用当日最高/最低价判定是否触发（真实条件单会成交）；
 - 当日新成交的仓位：仅用当前价判定，避免用当日 K 线做“事后判断”（前视偏差）。
+- 挂单成交价与回测同口径：若成交日开盘已越过挂单价（跳空），成交价记为当日开盘价（更差的价格）；
+  后续止损/止盈/盈亏均以该实际成交价为基准，避免实盘记账系统性低估跳空成本。
 """
 from __future__ import annotations
 
@@ -50,6 +52,11 @@ def trading_days_held(cfg, product, open_date, today):
 def pnl_of(direction, entry, price, mult, lots):
     pts = (price - entry) if direction == "long" else (entry - price)
     return round(pts * mult * lots, 1)
+
+
+def fill_of(p):
+    """实际成交价：跳空时记录为当日开盘价，否则为挂单价；旧数据回退挂单价。"""
+    return p.get("fill_price") or p["entry_price"]
 
 
 def main():
@@ -112,18 +119,28 @@ def main():
                 changed = True
                 continue  # 删除该挂单
             if today == p["plan_date"]:
-                filled = (q["high"] >= p["entry_price"]) if direction == "long" \
-                    else (q["low"] <= p["entry_price"])
+                # 与回测同口径：开盘已越过挂单价则按开盘价成交（跳空），否则按挂单价成交
+                if direction == "long":
+                    gapped = q["open"] >= p["entry_price"]
+                    filled = q["high"] >= p["entry_price"]
+                else:
+                    gapped = q["open"] <= p["entry_price"]
+                    filled = q["low"] <= p["entry_price"]
                 if filled:
+                    fill = q["open"] if gapped else p["entry_price"]
                     p["status"] = "open"
                     p["open_date"] = today
-                    p["fill_price"] = p["entry_price"]
+                    p["fill_price"] = fill
+                    advice = "已成交。止损 {}，止盈1 {}，止盈2 {}。".format(
+                        p["stop_loss"], p["tp1"], p["tp2"])
+                    if abs(fill - p["entry_price"]) > 1e-9:
+                        advice = "开盘跳空成交：成交价 {}（挂单价 {}）。".format(
+                            fill, p["entry_price"]) + advice
                     events.append({
                         "product": p["name"], "direction": dir_cn(direction),
-                        "action": "挂单成交", "price": p["entry_price"],
+                        "action": "挂单成交", "price": fill,
                         "pnl": 0.0,
-                        "advice": "已成交。止损 {}，止盈1 {}，止盈2 {}。".format(
-                            p["stop_loss"], p["tp1"], p["tp2"]),
+                        "advice": advice,
                     })
                     changed = True
                 keep.append(p)
@@ -143,7 +160,7 @@ def main():
 
         # 周末/长假前强制平仓（持仓不过周末/节假日）
         if flatten_now:
-            pnl = pnl_of(direction, p["entry_price"], cur, mult, lots_open)
+            pnl = pnl_of(direction, fill_of(p), cur, mult, lots_open)
             events.append({
                 "product": p["name"], "direction": dir_cn(direction),
                 "action": "周末/节前强平", "price": cur, "pnl": pnl,
@@ -163,7 +180,7 @@ def main():
 
         # 1. 止损（保守优先：同时触及止损与其他条件时按止损处理）
         if stop_hit:
-            pnl = pnl_of(direction, p["entry_price"], p["stop_loss"], mult, lots_open)
+            pnl = pnl_of(direction, fill_of(p), p["stop_loss"], mult, lots_open)
             cool = pnl <= 0
             advice = "已按规则离场。" + ("进入 {} 天冷却期。".format(cfg["money"]["cooldown_days"])
                                      if cool else "该笔未亏损，不设冷却。")
@@ -180,7 +197,7 @@ def main():
 
         # 2. 第二止盈（全平）
         if tp2_hit:
-            pnl = pnl_of(direction, p["entry_price"], p["tp2"], mult, lots_open)
+            pnl = pnl_of(direction, fill_of(p), p["tp2"], mult, lots_open)
             events.append({
                 "product": p["name"], "direction": dir_cn(direction),
                 "action": "第二止盈全平", "price": p["tp2"], "pnl": pnl,
@@ -194,17 +211,17 @@ def main():
             if lots_open <= 1:
                 action = "第一止盈·上移保本"
                 advice = ("单手持仓无法部分止盈：止损上移至保本 {}，继续持有博止盈2。"
-                          .format(p["entry_price"]))
+                          .format(fill_of(p)))
                 pnl = 0.0
             else:
                 close_lots = int(math.floor(lots_open * float(cfg["exit"]["tp1_close_ratio"])))
                 close_lots = max(1, min(close_lots, lots_open - 1))
-                pnl = pnl_of(direction, p["entry_price"], p["tp1"], mult, close_lots)
+                pnl = pnl_of(direction, fill_of(p), p["tp1"], mult, close_lots)
                 p["lots_open"] = lots_open - close_lots
                 action = "第一止盈·减仓{}手".format(close_lots)
                 advice = ("已减仓{}手止盈，剩余{}手止损上移至保本 {}。"
-                          .format(close_lots, p["lots_open"], p["entry_price"]))
-            p["stop_loss"] = p["entry_price"]
+                          .format(close_lots, p["lots_open"], fill_of(p)))
+            p["stop_loss"] = fill_of(p)
             p["tp1_done"] = True
             events.append({
                 "product": p["name"], "direction": dir_cn(direction),
@@ -217,7 +234,7 @@ def main():
         # 4. 时间止损（满 N 个交易日）
         held = trading_days_held(cfg, p["product"], open_date, today)
         if held >= int(cfg["exit"]["max_hold_days"]):
-            pnl = pnl_of(direction, p["entry_price"], cur, mult, lots_open)
+            pnl = pnl_of(direction, fill_of(p), cur, mult, lots_open)
             events.append({
                 "product": p["name"], "direction": dir_cn(direction),
                 "action": "到期平仓", "price": cur, "pnl": pnl,
@@ -262,20 +279,20 @@ def build_markdown(events, keep, rt, cfg):
     if open_pos or pend:
         lines.append("")
         lines.append("### 剩余持仓/挂单")
-        lines.append("| 品种 | 方向 | 状态 | 入场价 | 现价 | 止损 | 止盈1 | 止盈2 | 剩余手数 | 浮动盈亏 |")
+        lines.append("| 品种 | 方向 | 状态 | 成交/挂单价 | 现价 | 止损 | 止盈1 | 止盈2 | 剩余手数 | 浮动盈亏 |")
         lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
         for p in open_pos + pend:
             q = rt.get(cfg["products"][p["product"]]["sina"], {})
             cur = q.get("last", "")
             if p.get("status") == "open":
-                fp = pnl_of(p["direction"], p["entry_price"], cur, float(p["multiplier"]),
+                fp = pnl_of(p["direction"], fill_of(p), cur, float(p["multiplier"]),
                             int(p.get("lots_open", p["lots"]))) if cur != "" else ""
             else:
                 fp = "-"
             lines.append("| {n} | {d} | {st} | {e} | {c} | {sl} | {t1} | {t2} | {lo} | {fp} |".format(
                 n=p["name"], d=dir_cn(p["direction"]),
                 st="持仓中" if p["status"] == "open" else "待成交",
-                e=p.get("entry_price", ""), c=cur, sl=p["stop_loss"],
+                e=p.get("fill_price", p.get("entry_price", "")), c=cur, sl=p["stop_loss"],
                 t1=p["tp1"], t2=p["tp2"],
                 lo=p.get("lots_open", p["lots"]), fp=fp))
 
