@@ -25,6 +25,18 @@ def dir_cn(direction):
     return "做多" if direction == "long" else "做空"
 
 
+def round_to_tick(value, tick):
+    """把价差 round 到最小变动单位 tick 的整数倍（取最近）。"""
+    if tick is None or tick <= 0:
+        return round(value)
+    return round(value / tick) * tick
+
+
+def fmt_int(v):
+    """整数值去掉小数点展示。"""
+    return int(v) if v == int(v) else v
+
+
 def main():
     cfg = load_config()
     products = list(cfg["products"].keys())
@@ -165,13 +177,16 @@ def build_markdown(cfg, today, plan_date, results, selected, active):
         lines.append("| 品种 | 方向 | 挂单价 | 止损 | 止盈1 | 止盈2 | 手数 | 保证金/手 | 量比 | 止损价差 | 止盈价差(TP2) |")
         lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
         for s in selected:
-            stop_sp = round(abs(s["stop"] - s["entry"]), 1)
-            tp2_sp = round(abs(s["tp2"] - s["entry"]), 1)
+            tick = cfg["products"][s["product"]].get("tick", 1)
+            raw_stop = abs(s["stop"] - s["entry"])
+            raw_tp2 = abs(s["tp2"] - s["entry"])
+            stop_sp = round_to_tick(raw_stop, tick)
+            tp2_sp = round_to_tick(raw_tp2, tick)
             lines.append("| {name}({prod}) | {d} | {e} | {sl} | {t1} | {t2} | {lots} | {mg} | {vr} | {ss} | {ts} |".format(
                 name=s["name"], prod=s["product"], d=dir_cn(s["direction"]),
                 e=s["entry"], sl=s["stop"], t1=s["tp1"], t2=s["tp2"],
                 lots=s["lots"], mg=s["margin_per_lot"], vr=round(s["vol_ratio"], 2),
-                ss=stop_sp, ts=tp2_sp))
+                ss=fmt_int(stop_sp), ts=fmt_int(tp2_sp)))
         lines.append("")
 
         # ---- 挂单时机提醒 ----
@@ -192,10 +207,14 @@ def build_markdown(cfg, today, plan_date, results, selected, active):
         # ---- 每个品种的详细挂单参数（含附加止损止盈价差）----
         lines.append("**挂单操作明细**（交易软件中按以下参数创建条件单）：")
         for s in selected:
-            stop_sp = round(abs(s["stop"] - s["entry"]), 1)
-            tp1_sp = round(abs(s["tp1"] - s["entry"]), 1)
-            tp2_sp = round(abs(s["tp2"] - s["entry"]), 1)
             p = cfg["products"][s["product"]]
+            tick = p.get("tick", 1)
+            raw_stop = abs(s["stop"] - s["entry"])
+            raw_tp1 = abs(s["tp1"] - s["entry"])
+            raw_tp2 = abs(s["tp2"] - s["entry"])
+            stop_sp = round_to_tick(raw_stop, tick)
+            tp1_sp = round_to_tick(raw_tp1, tick)
+            tp2_sp = round_to_tick(raw_tp2, tick)
             if s["direction"] == "long":
                 trigger_cond = "≥ {}".format(s["entry"])
                 trigger_action = "买入开仓{}手".format(s["lots"])
@@ -209,8 +228,8 @@ def build_markdown(cfg, today, plan_date, results, selected, active):
                 cond=trigger_cond, act=trigger_action, lots=s["lots"]))
             lines.append("- 期限：当日有效（{pd} 15:15 前）。".format(pd=plan_date))
             lines.append("- 附加止损止盈：选「限价止损+限价止盈」或「限价止损」。")
-            lines.append("  - **止损价差 = {ss}**，委托价**市价**（自动兜底）。".format(ss=stop_sp))
-            lines.append("  - **止盈价差 = {ts}**，委托价**市价**（到 TP2 自动平仓离场）。".format(ts=tp2_sp))
+            lines.append("  - **止损价差 = {ss}**，委托价**市价**（自动兜底）。".format(ss=fmt_int(stop_sp)))
+            lines.append("  - **止盈价差 = {ts}**，委托价**市价**（到 TP2 自动平仓离场）。".format(ts=fmt_int(tp2_sp)))
             lines.append("- 到价提醒（附加单表达不了，需手动）：")
             if s["lots"] <= 1:
                 lines.append("  - **TP1 = {}**：提醒你把止损从 {} 手动上移到保本 {}，继续持有博 TP2。".format(
