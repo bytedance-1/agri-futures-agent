@@ -156,24 +156,71 @@ def build_markdown(cfg, today, plan_date, results, selected, active):
         int(cfg["money"]["max_margin_ratio"] * 100)))
     lines.append("")
 
+    # 计算挂单时机提醒：区分周五 vs 周一~周四
+    today_d = dt.date.fromisoformat(today)
+    is_friday = today_d.weekday() == 4  # Python weekday: Mon=0, Fri=4
+
     if selected:
         lines.append("### 一、新挂单计划（{}条）".format(len(selected)))
-        lines.append("| 品种 | 方向 | 挂单价 | 止损 | 止盈1(平60%) | 止盈2 | 手数 | 保证金/手 | 量比 |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+        lines.append("| 品种 | 方向 | 挂单价 | 止损 | 止盈1 | 止盈2 | 手数 | 保证金/手 | 量比 | 止损价差 | 止盈价差(TP2) |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
         for s in selected:
-            lines.append("| {name}({prod}) | {d} | {e} | {sl} | {t1} | {t2} | {lots} | {mg} | {vr} |".format(
+            stop_sp = round(abs(s["stop"] - s["entry"]), 1)
+            tp2_sp = round(abs(s["tp2"] - s["entry"]), 1)
+            lines.append("| {name}({prod}) | {d} | {e} | {sl} | {t1} | {t2} | {lots} | {mg} | {vr} | {ss} | {ts} |".format(
                 name=s["name"], prod=s["product"], d=dir_cn(s["direction"]),
                 e=s["entry"], sl=s["stop"], t1=s["tp1"], t2=s["tp2"],
-                lots=s["lots"], mg=s["margin_per_lot"], vr=round(s["vol_ratio"], 2)))
+                lots=s["lots"], mg=s["margin_per_lot"], vr=round(s["vol_ratio"], 2),
+                ss=stop_sp, ts=tp2_sp))
         lines.append("")
-        lines.append("**挂单操作**：在交易软件中设置“条件单/停损单”（非普通限价单）：")
-        for s in selected:
-            if s["direction"] == "long":
-                lines.append("- {}：价格 ≥ {} 触发买入开仓{}手".format(s["name"], s["entry"], s["lots"]))
-            else:
-                lines.append("- {}：价格 ≤ {} 触发卖出开仓{}手".format(s["name"], s["entry"], s["lots"]))
+
+        # ---- 挂单时机提醒 ----
+        if is_friday:
+            lines.append("⚠️ **今日为周五，不要现在挂单！**")
+            lines.append("今晚夜盘直接触发会导致持仓过周末。")
+            lines.append("请等待 **今晚 23:10 周五夜盘复核任务** 推送结论后，再按结论挂单（或放弃本信号）。")
+        else:
+            lines.append("✅ **现在就挂单**（周一到周四让夜盘/次日日盘触发均可，不会持仓过周末）。")
+            for s in selected:
+                p = cfg["products"][s["product"]]
+                has_night = p.get("has_night", False)
+                if not has_night:
+                    lines.append("- {} 无夜盘，最早明日 09:00 开盘才可能触发。".format(s["name"]))
         lines.append("- 挂单仅当日({})有效；未被触发则次日自动作废。".format(plan_date))
         lines.append("")
+
+        # ---- 每个品种的详细挂单参数（含附加止损止盈价差）----
+        lines.append("**挂单操作明细**（交易软件中按以下参数创建条件单）：")
+        for s in selected:
+            stop_sp = round(abs(s["stop"] - s["entry"]), 1)
+            tp1_sp = round(abs(s["tp1"] - s["entry"]), 1)
+            tp2_sp = round(abs(s["tp2"] - s["entry"]), 1)
+            p = cfg["products"][s["product"]]
+            if s["direction"] == "long":
+                trigger_cond = "≥ {}".format(s["entry"])
+                trigger_action = "买入开仓{}手".format(s["lots"])
+            else:
+                trigger_cond = "≤ {}".format(s["entry"])
+                trigger_action = "卖出开仓{}手".format(s["lots"])
+
+            lines.append("")
+            lines.append("**{name}（{d}）**".format(name=s["name"], d=dir_cn(s["direction"])))
+            lines.append("- 触发条件：价格 {cond}，{act}，委托价**对手价**，手数 {lots}。".format(
+                cond=trigger_cond, act=trigger_action, lots=s["lots"]))
+            lines.append("- 期限：当日有效（{pd} 15:15 前）。".format(pd=plan_date))
+            lines.append("- 附加止损止盈：选「限价止损+限价止盈」或「限价止损」。")
+            lines.append("  - **止损价差 = {ss}**，委托价**市价**（自动兜底）。".format(ss=stop_sp))
+            lines.append("  - **止盈价差 = {ts}**，委托价**市价**（到 TP2 自动平仓离场）。".format(ts=tp2_sp))
+            lines.append("- 到价提醒（附加单表达不了，需手动）：")
+            if s["lots"] <= 1:
+                lines.append("  - **TP1 = {}**：提醒你把止损从 {} 手动上移到保本 {}，继续持有博 TP2。".format(
+                    s["tp1"], s["stop"], s["entry"]))
+            else:
+                close_lots = max(1, int(s["lots"] * float(cfg["exit"]["tp1_close_ratio"])))
+                remain = s["lots"] - close_lots
+                lines.append("  - **TP1 = {}**：提醒你手动减仓{}手止盈 + 剩余{}手止损上移保本 {}。".format(
+                    s["tp1"], close_lots, remain, s["entry"]))
+            lines.append("  - **TP2 = {}**：附加止盈自动平仓；可再设提醒双保险。".format(s["tp2"]))
     else:
         lines.append("### 一、新挂单计划：无（今日无满足全部条件的信号）")
         lines.append("")
