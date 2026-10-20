@@ -30,40 +30,9 @@
     },
     "note": "强空头趋势+极端放量(量分位0.98)+增仓大跌，大实体收最低位；原1.5ATR止损过宽超8%风险硬上限，收紧至0.95ATR控制单笔风险",
     "open_date": "2026-10-19",
-    "fill_price": 5990
-  },
-  {
-    "id": "MA-20261016-L",
-    "product": "MA",
-    "name": "甲醇",
-    "direction": "long",
-    "status": "open",
-    "plan_date": "2026-10-19",
-    "entry_price": 3224,
-    "lots": 1,
-    "lots_open": 1,
-    "stop_loss": 3110,
-    "initial_stop": 3110,
-    "tp1": 3405,
-    "tp2": 3523,
-    "tp1_done": false,
-    "atr": 117.83,
-    "multiplier": 10,
-    "margin_per_lot": 3868.8,
-    "risk_per_lot": 1190.0,
-    "created_date": "2026-10-16",
-    "signal": {
-      "vol_ratio": 1.45,
-      "vol_rank": 0.72,
-      "oi_delta": 31510.0,
-      "body_pct": 0.63,
-      "close_pos": 0.6,
-      "ma20": 3060.9,
-      "ma60": 2897.03
-    },
-    "note": "收盘站上MA20/MA60且增仓上涨，趋势反转信号；MA20斜率仍负为反转初期，收紧止损至1.0ATR验证突破有效性；夜盘复核：继续。夜盘收3207.0低于触发价3224，夜盘最高3211.0未触及挂单；收仍站上MA20(3060.9)/MA60(2897.0)上升趋势完好；夜盘增仓22772手支持做多；突破位3224仍有效",
-    "open_date": "2026-10-19",
-    "fill_price": 3228
+    "fill_price": 5990,
+    "last_price": 5956.0,
+    "last_check": "2026-10-20"
   },
   {
     "id": "SM-20261019-L",
