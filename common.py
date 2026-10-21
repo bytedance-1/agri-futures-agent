@@ -27,6 +27,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(ROOT, "config.json")
 POSITION_PATH = os.path.join(ROOT, "position.json")
 STATE_PATH = os.path.join(ROOT, "state.json")
+CLOSED_TRADES_PATH = os.path.join(ROOT, "closed_trades.json")
 
 
 # ============================================================
@@ -105,6 +106,24 @@ def is_trading_day(day, cfg=None, holidays=None):
 def is_pre_closure_day(today, holidays=None, min_gap=3):
     """今日是否为「周末/长假前最后一个交易日」：距下一交易日 >= min_gap 天（周末为 3 天）。"""
     return (next_trading_day(today, holidays) - today).days >= min_gap
+
+
+def week_of(date):
+    """返回 date 所在 ISO 周的周一日期。"""
+    return date - dt.timedelta(days=date.weekday())
+
+
+def load_closed_trades(path=None):
+    path = path or CLOSED_TRADES_PATH
+    return load_json(path, [])
+
+
+def append_closed_trade(trade, path=None):
+    """追加一条平仓记录。trade 必须是 dict，含 id/product/direction 等。"""
+    path = path or CLOSED_TRADES_PATH
+    arr = load_json(path, [])
+    arr.append(trade)
+    save_json(path, arr)
 
 
 # ============================================================

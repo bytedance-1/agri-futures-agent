@@ -26,7 +26,8 @@ from __future__ import annotations
 import math
 import datetime as dt
 
-from common import (POSITION_PATH, STATE_PATH, beijing_now, fetch_daily,
+from common import (POSITION_PATH, STATE_PATH, CLOSED_TRADES_PATH, append_closed_trade,
+                    beijing_now, fetch_daily,
                     fetch_realtime, is_pre_closure_day, load_config, load_json,
                     market_holidays, push, save_json)
 
@@ -57,6 +58,33 @@ def pnl_of(direction, entry, price, mult, lots):
 def fill_of(p):
     """实际成交价：跳空时记录为当日开盘价，否则为挂单价；旧数据回退挂单价。"""
     return p.get("fill_price") or p["entry_price"]
+
+
+def archive_one(p, close_price, pnl, exit_reason, close_date):
+    """完整离场时把条目归档到 closed_trades.json（挂单未成交也记录为 pnl=0 的失效事件）。"""
+    record = {
+        "id": p["id"],
+        "product": p["product"],
+        "name": p.get("name", p["product"]),
+        "direction": p["direction"],
+        "status": "closed",
+        "entry_price": p.get("fill_price") or p.get("entry_price"),
+        "entry_planned": p.get("entry_price"),
+        "open_date": p.get("open_date", p.get("plan_date")),
+        "close_date": close_date,
+        "close_price": close_price,
+        "exit_reason": exit_reason,
+        "lots": p.get("lots_open", p.get("lots")),
+        "multiplier": p.get("multiplier"),
+        "pnl": round(pnl, 1),
+        "stop_loss": p.get("stop_loss"),
+        "tp1": p.get("tp1"),
+        "tp2": p.get("tp2"),
+        "created_date": p.get("created_date"),
+        "signal": p.get("signal"),
+        "note": p.get("note", ""),
+    }
+    append_closed_trade(record, CLOSED_TRADES_PATH)
 
 
 def main():
@@ -108,6 +136,7 @@ def main():
                     "action": "节前撤单", "price": q["last"], "pnl": 0.0,
                     "advice": "今日为周末/长假前最后一个交易日，撤销尚未成交的挂单，不新开仓。",
                 })
+                archive_one(p, q["last"], 0.0, "pre_flatten_cancel", today)
                 changed = True
                 continue  # 删除该挂单
             if today > p["plan_date"]:
@@ -116,6 +145,7 @@ def main():
                     "action": "挂单失效", "price": q["last"], "pnl": 0.0,
                     "advice": "挂单在 {} 未被触发，已自动撤销。".format(p["plan_date"]),
                 })
+                archive_one(p, q["last"], 0.0, "expired", today)
                 changed = True
                 continue  # 删除该挂单
             if today == p["plan_date"]:
@@ -166,6 +196,7 @@ def main():
                 "action": "周末/节前强平", "price": cur, "pnl": pnl,
                 "advice": "今日为周末/长假前最后一个交易日，按市价强制平仓，持仓不过周末/节假日。",
             })
+            archive_one(p, cur, pnl, "pre_flatten", today)
             changed = True
             continue  # 删除持仓
 
@@ -192,6 +223,7 @@ def main():
             })
             if cool:
                 state["cooldowns"][p["product"]] = add_days(today, int(cfg["money"]["cooldown_days"]))
+            archive_one(p, p["stop_loss"], pnl, "stop", today)
             changed = True
             continue  # 删除持仓
 
@@ -203,6 +235,7 @@ def main():
                 "action": "第二止盈全平", "price": p["tp2"], "pnl": pnl,
                 "advice": "已达止盈2，全部平仓落袋。",
             })
+            archive_one(p, p["tp2"], pnl, "tp2", today)
             changed = True
             continue
 
@@ -240,6 +273,7 @@ def main():
                 "action": "到期平仓", "price": cur, "pnl": pnl,
                 "advice": "持仓满 {} 个交易日，按市价平仓。".format(cfg["exit"]["max_hold_days"]),
             })
+            archive_one(p, cur, pnl, "time", today)
             changed = True
             continue
 
