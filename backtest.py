@@ -13,12 +13,14 @@ backtest.py —— 规则回测验证（对比“优化版”与“原始版”�
 from __future__ import annotations
 
 import copy
+import datetime as dt
 import math
 
-from common import build_signal, fetch_daily, load_config
+from common import (build_signal, fetch_daily, is_pre_closure_day, load_config,
+                    market_holidays)
 
 
-def simulate(cfg, product, bars):
+def simulate(cfg, product, bars, holidays=None):
     f = cfg["filters"]
     ex = cfg["exit"]
     p = cfg["products"][product]
@@ -67,6 +69,16 @@ def simulate(cfg, product, bars):
 
         for k in range(j, n):
             b = bars[k]
+
+            # 周末/长假前强制平仓（持仓不过周末/节假日）
+            if cfg.get("flatten_before_holiday", True) and holidays:
+                bd = dt.date.fromisoformat(b["date"])
+                if is_pre_closure_day(bd, holidays):
+                    realized_pts += ((b["close"] - fill) if d == "long" else (fill - b["close"])) * remaining
+                    remaining = 0
+                    exit_k, exit_reason, exit_price = k, "pre_flatten", b["close"]
+                    break
+
             hi, lo = b["high"], b["low"]
             if d == "long":
                 stop_hit, tp2_hit, tp1_hit = lo <= cur_stop, hi >= tp2, hi >= tp1
@@ -176,6 +188,7 @@ def show(label, trades_by_product):
 def main():
     cfg = load_config()
     products = list(cfg["products"].keys())
+    holidays = market_holidays(cfg)
     print("加载历史数据（约 900 个交易日）...")
     data = {}
     for p in products:
@@ -183,8 +196,8 @@ def main():
         print("  {} {} 根K线：{} ~ {}".format(
             cfg["products"][p]["name"], len(data[p]), data[p][0]["date"], data[p][-1]["date"]))
 
-    opt = {p: simulate(cfg, p, data[p]) for p in products}
-    base = {p: simulate(baseline_cfg(cfg), p, data[p]) for p in products}
+    opt = {p: simulate(cfg, p, data[p], holidays) for p in products}
+    base = {p: simulate(baseline_cfg(cfg), p, data[p], holidays) for p in products}
 
     show("当前参数（config.json）", opt)
     show("原始对照参数（更宽松的过滤/止损，仅作对比）", base)

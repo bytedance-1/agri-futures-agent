@@ -146,9 +146,13 @@ def main():
 
     hit_count = sum(1 for f in followups if f["hit"])
 
+    # -------- 系统运行观察指标 --------
+    sys_obs = build_system_obs(real_pnl + no_fill, cfg)
+
     # -------- 组合层统计 --------
     s_real = stats(real_pnl, "pnl")
     s_all = stats(closed, "pnl")
+    all_real_pnl = [t for t in closed if t.get("pnl", 0) != 0]
 
     # -------- 拼 Markdown --------
     md = build_markdown(
@@ -156,7 +160,7 @@ def main():
         week_closed, no_fill, by_reason,
         real_pnl, active, cum_pnl,
         followups, hit_count, week_new,
-        s_real, s_all, capital,
+        s_real, s_all, capital, sys_obs, all_real_pnl,
     )
 
     title = "【期货组合】周报 {} ~ {}".format(last_mon.isoformat(), last_sun.isoformat())
@@ -164,11 +168,65 @@ def main():
     print(md)
 
 
+def build_system_obs(week_closed, cfg):
+    """基于本周 closed_trades 计算系统运行观察指标。"""
+    obs = {
+        "gap_count": 0, "gap_cost_total": 0.0, "avg_gap_cost": 0.0,
+        "holding_days": [], "avg_holding_days": 0.0,
+        "no_fill_reasons": {},
+        "advice": [],
+    }
+    gap_cases = []
+    for t in week_closed:
+        # 跳空成本：entry_planned 与 entry_price（实际成交价）的价差
+        planned = t.get("entry_planned")
+        actual = t.get("entry_price")
+        if planned and actual and abs(planned - actual) > 1e-6:
+            # 对做空：成交价低于挂单价意味着跳空亏损
+            gap = abs(actual - planned)
+            obs["gap_cost_total"] += gap
+            obs["gap_count"] += 1
+            gap_cases.append(t)
+
+        # 未成交原因统计
+        reason = t.get("exit_reason")
+        if reason in ("expired", "pre_flatten_cancel"):
+            obs["no_fill_reasons"][reason] = obs["no_fill_reasons"].get(reason, 0) + 1
+
+        # 持仓天数（仅真实成交）
+        if t.get("pnl", 0) != 0 and t.get("open_date") and t.get("close_date"):
+            try:
+                od = dt.date.fromisoformat(t["open_date"])
+                cd = dt.date.fromisoformat(t["close_date"])
+                obs["holding_days"].append((cd - od).days)
+            except Exception:
+                pass
+
+    if obs["gap_count"]:
+        obs["avg_gap_cost"] = obs["gap_cost_total"] / obs["gap_count"]
+    if obs["holding_days"]:
+        obs["avg_holding_days"] = sum(obs["holding_days"]) / len(obs["holding_days"])
+
+    # 基于数据给出系统优化建议（文本建议，最终决策仍由进化脚本回测验证）
+    if obs["gap_count"] >= 2 and obs["avg_gap_cost"] > 3:
+        obs["advice"].append("本周出现 {} 次跳空成交，平均成本 {} 元，可考虑在回测中测试 'slippage_ticks' 参数或改用更宽的触发缓冲。".format(
+            obs["gap_count"], round(obs["avg_gap_cost"], 1)))
+    if obs["avg_holding_days"] >= 3.5:
+        obs["advice"].append("平均持仓天数 {:.1f} 天，接近上限，可在进化脚本中测试 max_hold_days 缩短或增加移动止损。".format(
+            obs["avg_holding_days"]))
+    if obs["no_fill_reasons"].get("expired", 0) >= 2:
+        obs["advice"].append("本周 {} 笔挂单因过期未成交，可考虑测试 entry_buffer_ticks 或放宽触发条件。".format(
+            obs["no_fill_reasons"]["expired"]))
+    if not obs["advice"]:
+        obs["advice"].append("本周系统运行平稳，暂无显著异常。")
+    return obs
+
+
 def build_markdown(cfg, today, last_mon, last_sun,
                    week_closed, no_fill, by_reason,
                    real_pnl, active, cum_pnl,
                    followups, hit_count, week_new,
-                   s_real, s_all, capital):
+                   s_real, s_all, capital, sys_obs, all_real_pnl):
     lines = []
     lines.append("**统计周期**：{} ~ {}　**生成时间**：{}".format(
         last_mon.isoformat(), last_sun.isoformat(), beijing_now().strftime("%Y-%m-%d %H:%M")))
@@ -259,8 +317,25 @@ def build_markdown(cfg, today, last_mon, last_sun,
         lines.append("（空仓）")
     lines.append("")
 
-    # ---- 五、历史累计 ----
-    lines.append("### 五、历史累计（启动以来）")
+    # ---- 五、系统运行观察 ----
+    lines.append("### 五、系统运行观察")
+    lines.append("*从真实成交数据里观察执行层效率，为系统级进化（监控/执行/风控）提供数据依据*")
+    lines.append("| 指标 | 数值 |")
+    lines.append("| --- | --- |")
+    lines.append("| 本周平仓笔数 | {} |".format(len(week_closed)))
+    lines.append("| 跳空成交次数 | {} |".format(sys_obs["gap_count"]))
+    lines.append("| 平均跳空成本 | {} 元 |".format(round(sys_obs["avg_gap_cost"], 1) if sys_obs["gap_count"] else "-"))
+    lines.append("| 平均持仓天数 | {} 天 |".format(round(sys_obs["avg_holding_days"], 1) if sys_obs["holding_days"] else "-"))
+    lines.append("| 挂单过期未成交 | {} 笔 |".format(sys_obs["no_fill_reasons"].get("expired", 0)))
+    lines.append("| 节前撤单 | {} 笔 |".format(sys_obs["no_fill_reasons"].get("pre_flatten_cancel", 0)))
+    lines.append("")
+    lines.append("**系统优化建议（待 rule_evolution.py 回测验证）**：")
+    for adv in sys_obs["advice"]:
+        lines.append("- {}".format(adv))
+    lines.append("")
+
+    # ---- 六、历史累计 ----
+    lines.append("### 六、历史累计（启动以来）")
     if s_all:
         lines.append("| 指标 | 数值 |")
         lines.append("| --- | --- |")

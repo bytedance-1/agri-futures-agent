@@ -1,18 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-rule_evolution.py —— 交易规则安全进化管道
--------------------------------------------
-运行时机：周一 08:30，紧跟 weekly_report.py 之后。
+rule_evolution.py —— 交易规则与系统安全进化管道
+--------------------------------------------------
+运行时机：周一 08:35，紧跟 weekly_report.py 之后。
 核心约束（用户反复强调）：
   1. 不能亏一次就草率改规则
   2. 必须长期学习、回测验证
   3. 只有明确正向收益才允许调整
   4. 改动要慎重
 
+进化范围从"交易规则参数"扩展到"系统运行参数"：
+  - 信号过滤参数（filter）
+  - 出场参数（exit）
+  - 系统执行参数（减仓比例、滑点、节前强平等）
+
 四层闸门：
   闸门 1 - 冷启动期：closed_trades 中真实平仓 < MIN_SAMPLE 笔 → 只输出建议，不自动改
-  闸门 2 - 候选约束：最多 3 个候选，仅调 filter/exit 参数，不动风控核心
-  闸门 3 - 回测门槛：胜率 ↑ ≥2%、回撤 ≤ 原+1%、年化 ↑ ≥5%、笔数 ≥ 原 60%（全部满足）
+  闸门 2 - 候选约束：最多 3 个候选，仅调 filter/exit/系统执行参数，不动核心风控
+  闸门 3 - 回测门槛：胜率 ↑ ≥2%、回撤 ≤ 原+1%、总 PnL ↑ ≥10%、笔数 ≥ 原 60%、样本 ≥30（全部满足）
   闸门 4 - 锁定期：上次升级后 28 天内不再升级
 
 升级动作：
@@ -31,7 +36,7 @@ import os
 from backtest import simulate, stats
 from common import (CONFIG_PATH, CLOSED_TRADES_PATH, STATE_PATH, beijing_now,
                     fetch_daily, load_closed_trades, load_config, load_json,
-                    push, save_json)
+                    market_holidays, push, save_json)
 
 
 # ---- 闸门参数 ----
@@ -56,21 +61,29 @@ TUNABLES = [
     ("exit", "tp1_atr_mult", [1.2, 1.3, 1.5, 1.7, 1.8]),
     ("exit", "tp2_atr_mult", [2.0, 2.3, 2.5, 2.7, 3.0]),
     ("exit", "max_hold_days", [3, 4, 5, 6]),
+    ("exit", "tp1_close_ratio", [0.3, 0.4, 0.5, 0.6, 0.7]),
+    ("exit", "slippage_ticks", [0, 1, 2, 3]),
+    # 系统执行参数
+    (None, "flatten_before_holiday", [True, False]),
 ]
 
 
 def getnested(cfg, path):
+    # path 形如 ("filters", "vol_mult") 或 (None, "flatten_before_holiday")
     cur = cfg
     for k in path:
+        if k is None:
+            continue
         cur = cur[k]
     return cur
 
 
 def setnested(cfg, path, val):
     cur = cfg
-    for k in path[:-1]:
+    keys = [k for k in path if k is not None]
+    for k in keys[:-1]:
         cur = cur[k]
-    cur[path[-1]] = val
+    cur[keys[-1]] = val
 
 
 def apply_tune(base_cfg, tune):
@@ -81,7 +94,15 @@ def apply_tune(base_cfg, tune):
     return new
 
 
-def grid_search(cfg, products, data, baseline_stats, capital):
+def param_label(path, name):
+    """把参数路径格式化成人类可读标签，支持顶层参数（path 含 None）。"""
+    keys = [k for k in path if k is not None]
+    if keys:
+        return ".".join(keys)
+    return name
+
+
+def grid_search(cfg, products, data, baseline_stats, capital, holidays):
     """对每个 TUNABLE 做单参数网格搜索，返回 top-3 候选（含回测指标、是否过闸门）。"""
     candidates = []
     for path, name, options in TUNABLES:
@@ -93,7 +114,7 @@ def grid_search(cfg, products, data, baseline_stats, capital):
                 continue
             tune = [(path, opt)]
             new_cfg = apply_tune(cfg, tune)
-            trades_by_prod = {p: simulate(new_cfg, p, data[p]) for p in products}
+            trades_by_prod = {p: simulate(new_cfg, p, data[p], holidays) for p in products}
             all_tr = []
             for tr in trades_by_prod.values():
                 all_tr += tr
@@ -175,6 +196,7 @@ def main():
 
     # ---- 拉历史数据 ----
     products = list(cfg["products"].keys())
+    holidays = market_holidays(cfg)
     try:
         data = {p: fetch_daily(cfg["products"][p]["sina"], 900) for p in products}
     except Exception as e:
@@ -185,7 +207,7 @@ def main():
     # ---- 基线回测 ----
     base_tr = []
     for p in products:
-        base_tr += simulate(cfg, p, data[p])
+        base_tr += simulate(cfg, p, data[p], holidays)
     base_stats = stats(base_tr) or {"n": 0, "win_rate": 0, "total": 0, "mdd": 0}
 
     md_parts.append("### 基线回测（当前 config.json）")
@@ -221,7 +243,7 @@ def main():
         return
 
     # ---- 候选生成 + 回测对比 ----
-    candidates = grid_search(cfg, products, data, base_stats, capital)
+    candidates = grid_search(cfg, products, data, base_stats, capital, holidays)
 
     md_parts.append("### Top-3 候选参数")
     md_parts.append("| 参数 | 当前值 | 候选值 | 笔数 | 胜率 | 总PnL | 回撤 | 通过闸门 |")
@@ -231,8 +253,9 @@ def main():
         pf = c["stats"].get("pf", "-")
         if isinstance(pf, float) and math.isfinite(pf):
             pf = "{:.2f}".format(pf)
-        md_parts.append("| {}.{} | {} → **{}** | {} | {:.0%} | {:.0f} | {:.0f} | {} |".format(
-            c["path"][-2], c["path"][-1], c["from"], c["to"],
+        label = param_label(c["path"], c["name"])
+        md_parts.append("| {} | {} → **{}** | {} | {:.0%} | {:.0f} | {:.0f} | {} |".format(
+            label, c["from"], c["to"],
             c["stats"]["n"], c["stats"]["win_rate"], c["stats"]["total"],
             c["stats"]["mdd"], "✅ 全部通过" if c["pass"] else "❌"))
         if c["pass"]:
@@ -243,7 +266,8 @@ def main():
     # 候选失败的原因
     for c in candidates:
         if not c["pass"]:
-            md_parts.append("**{}.{} → {}** 未通过闸门：".format(c["path"][-2], c["path"][-1], c["to"]))
+            label = param_label(c["path"], c["name"])
+            md_parts.append("**{} → {}** 未通过闸门：".format(label, c["to"]))
             for r in c["reasons"]:
                 md_parts.append("  - ❌ {}".format(r))
     md_parts.append("")
@@ -274,8 +298,9 @@ def main():
     save_json(STATE_PATH, state)
 
     md_parts.append("### ✅ 自动升级已执行")
-    md_parts.append("**升级项**：{}.{} {} → {}".format(
-        best["path"][-2], best["path"][-1], best["from"], best["to"]))
+    label = param_label(best["path"], best["name"])
+    md_parts.append("**升级项**：{} {} → {}".format(
+        label, best["from"], best["to"]))
     md_parts.append("**备份**：{}".format(backup))
     md_parts.append("**锁定期**：{} 天内不再自动升级".format(LOCK_DAYS))
     md_parts.append("")
