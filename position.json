@@ -31,39 +31,7 @@
     "note": "强空头趋势+极端放量(量分位0.98)+增仓大跌，大实体收最低位；原1.5ATR止损过宽超8%风险硬上限，收紧至0.95ATR控制单笔风险",
     "open_date": "2026-10-19",
     "fill_price": 5990,
-    "last_price": 5956.0,
-    "last_check": "2026-10-20"
-  },
-  {
-    "id": "SM-20261019-L",
-    "product": "SM",
-    "name": "锰硅",
-    "direction": "long",
-    "status": "pending",
-    "plan_date": "2026-10-20",
-    "entry_price": 5942.0,
-    "lots": 1,
-    "lots_open": 1,
-    "stop_loss": 5825.74,
-    "initial_stop": 5825.74,
-    "tp1": 6058.26,
-    "tp2": 6135.76,
-    "tp1_done": false,
-    "atr": 77.5,
-    "multiplier": 5,
-    "margin_per_lot": 3565.2,
-    "risk_per_lot": 591.3,
-    "created_date": "2026-10-19",
-    "signal": {
-      "vol_ratio": 1.64,
-      "vol_rank": 0.68,
-      "oi_delta": 6600.0,
-      "body_pct": 0.99,
-      "close_pos": 0.56,
-      "ma20": 5827.4,
-      "ma60": 5839.47
-    },
-    "note": "收盘站上MA20/MA60趋势向上；量比1.64+分位0.68放量；增仓6600手支持上涨；阳线实体0.99%收中位偏上。趋势/量能/持仓/实体四维配合，入选做多。",
-    "place_hint": "务必在 2026-10-20（周二）日盘 09:00 开盘后挂单，设置条件单：价格≥5942.0 触发买入开仓1手。切勿在今晚（10/19）夜盘挂单，避免持仓过周末风险。"
+    "last_price": 5927.0,
+    "last_check": "2026-10-21"
   }
 ]
