@@ -181,8 +181,11 @@ def main():
         # ---------------- 持仓中 ----------------
         p.setdefault("open_date", p.get("plan_date"))
         open_date = p["open_date"]
-        # 隔日持仓用当日高低价，当日成交只用当前价（保守，避免前视偏差）
-        use_range = open_date < today
+        # 隔日持仓用当日高低价（真实条件单从开盘就全天生效），当日成交只用当前价（保守）。
+        # 但 TP1 触发后止损已被盘中上移保本 → 新止损是从那一刻才生效的条件单，
+        # 不应再用"当日累计 high/low"判定（那包含了止损上移之前的历史行情），
+        # 否则会出现"止损改到保本但开盘价就触发"的假阳性 bug。
+        use_range = (open_date < today) and not p.get("tp1_done")
         hi = q["high"] if use_range else q["last"]
         lo = q["low"] if use_range else q["last"]
         cur = q["last"]

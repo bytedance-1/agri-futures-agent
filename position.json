@@ -1,1 +1,25 @@
-[]
+[
+  {
+    "id": "AP-20261016-S",
+    "product": "AP",
+    "name": "苹果",
+    "direction": "short",
+    "status": "open",
+    "plan_date": "2026-10-19",
+    "entry_price": 5991,
+    "lots": 1,
+    "lots_open": 1,
+    "stop_loss": 5990,
+    "initial_stop": 6147,
+    "tp1": 5742,
+    "tp2": 5576,
+    "tp1_done": true,
+    "atr": 165.49,
+    "multiplier": 10,
+    "margin_per_lot": 7189.2,
+    "risk_per_lot": 1580.0,
+    "created_date": "2026-10-16",
+    "open_date": "2026-10-19",
+    "fill_price": 5990
+  }
+]
