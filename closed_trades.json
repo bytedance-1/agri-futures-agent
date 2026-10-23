@@ -1,0 +1,35 @@
+[
+  {
+    "id": "AP-20261016-S",
+    "product": "AP",
+    "name": "苹果",
+    "direction": "short",
+    "status": "closed",
+    "entry_price": 5990,
+    "entry_planned": 5991,
+    "open_date": "2026-10-19",
+    "close_date": "2026-10-23",
+    "close_price": 5700,
+    "exit_reason": "manual_tp",
+    "lots": 1,
+    "multiplier": 10,
+    "pnl": 2900,
+    "stop_loss": 5990,
+    "tp1": 5742,
+    "tp2": 5576,
+    "tp2_actual": 5700,
+    "tp1_done": true,
+    "created_date": "2026-10-16",
+    "signal": {
+      "vol_ratio": 1.92,
+      "vol_rank": 0.98,
+      "oi_delta": 8411.0,
+      "body_pct": 2.03,
+      "close_pos": 0.03,
+      "ma20": 6937.4,
+      "ma60": 7409.0
+    },
+    "manual_override": true,
+    "note": "自动监控于 10-22 误判止损触发（当日 high=5996 触及保本止损 5990，已修复 use_range 逻辑），实际用户手动改 TP2 至 5700 平仓。"
+  }
+]

@@ -1,8 +1,15 @@
 {
   "cooldowns": {
-    "MA": "2026-10-22",
-    "AP": "2026-10-24"
+    "MA": "2026-10-22"
   },
   "last_signal_date": "2026-10-23",
-  "last_monitor_time": "2026-10-23 15:20:08"
+  "last_monitor_time": "2026-10-23 15:20:08",
+  "last_manual_close": "2026-10-23 15:27:47",
+  "last_close": {
+    "id": "AP-20261016-S",
+    "product": "AP",
+    "pnl": 2900,
+    "close_price": 5700,
+    "exit_reason": "manual_tp"
+  }
 }
