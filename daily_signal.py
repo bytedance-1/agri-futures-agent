@@ -153,13 +153,19 @@ def main():
     state["last_signal_date"] = today
     save_json(STATE_PATH, state)
 
-    md = build_markdown(cfg, today, plan_date, results, selected, active)
+    # 周四盘后：为 open 持仓生成"周五前止盈操作指引"
+    open_positions = [p for p in active if p.get("status") == "open"]
+    exit_proposals = build_friday_exit_proposals(cfg, open_positions, rt) \
+        if (today_d.weekday() == 3 and open_positions) else []
+
+    md = build_markdown(cfg, today, plan_date, results, selected, active, exit_proposals)
     title = "【期货组合】盘后信号 {} 生成{}条挂单".format(today, len(selected))
     push(title, md, cfg)
     print(md)
 
 
-def build_markdown(cfg, today, plan_date, results, selected, active):
+def build_markdown(cfg, today, plan_date, results, selected, active, exit_proposals=None):
+    exit_proposals = exit_proposals or []
     lines = []
     lines.append("**信号日期**：{}　**挂单交易日**：{}".format(today, plan_date))
     lines.append("**资金**：{}元　单笔风险{}%　单品种保证金上限{}%".format(
@@ -244,7 +250,17 @@ def build_markdown(cfg, today, plan_date, results, selected, active):
         lines.append("### 一、新挂单计划：无（今日无满足全部条件的信号）")
         lines.append("")
 
-    lines.append("### 二、当前持仓/挂单（{}笔）".format(len(active)))
+    # ---- 周四：周五持仓止盈操作指引 ----
+    if exit_proposals:
+        lines.append("### 二、🔔 周五持仓止盈操作指引（周四专属）")
+        lines.append("*无夜盘品种周五 14:30 代码强平，请按下方指引操作；有夜盘品种周五夜盘后可继续拿*")
+        lines.append("")
+        for prop in exit_proposals:
+            render_exit_proposal(cfg, prop, lines)
+        lines.append("")
+
+    lines.append("### {} 当前持仓/挂单（{}笔）".format(
+        "三" if exit_proposals else "二", len(active)))
     if active:
         lines.append("| 品种 | 方向 | 状态 | 挂单价/开仓价 | 止损 | 手数 |")
         lines.append("| --- | --- | --- | --- | --- | --- |")
@@ -258,7 +274,8 @@ def build_markdown(cfg, today, plan_date, results, selected, active):
         lines.append("（无）")
     lines.append("")
 
-    lines.append("### 三、各品种过滤情况")
+    lines.append("### {} 各品种过滤情况".format(
+        "四" if exit_proposals else "三"))
     for prod, sig, reason in results:
         nm = cfg["products"][prod]["name"]
         if sig:
@@ -274,6 +291,155 @@ def build_markdown(cfg, today, plan_date, results, selected, active):
     lines.append("")
     lines.append("> 风险提示：本信号为机械规则计算结果，不构成投资建议。请自行确认仓位与风险。")
     return "\n".join(lines)
+
+
+# ============================================================
+# 周四：周五持仓止盈操作指引
+# ============================================================
+def build_friday_exit_proposals(cfg, open_positions, rt):
+    """周四盘后为每个 open 持仓生成"周五前如何止盈/离场"的操作指引参数。"""
+    proposals = []
+    for p in open_positions:
+        prod = p["product"]
+        pinfo = cfg["products"][prod]
+        sym = pinfo["sina"]
+        if sym not in rt:
+            continue
+        q = rt[sym]
+        cur = float(q["last"])
+        direction = p["direction"]
+        fill = float(p.get("fill_price") or p.get("entry_price"))
+        mult = float(p["multiplier"])
+        lots = int(p.get("lots_open", p["lots"]))
+        tp1_done = p.get("tp1_done", False)
+        tp1 = float(p["tp1"])
+        tp2_orig = float(p["tp2"])
+        has_night = bool(pinfo.get("has_night", False))
+        tick = float(pinfo.get("tick", 1))
+        atr = float(p.get("atr") or 0)
+
+        pnl_now = round(
+            (fill - cur) * mult * lots if direction == "short" else
+            (cur - fill) * mult * lots, 1)
+        dist_to_tp2 = abs(tp2_orig - cur)   # 现价到原 TP2 的距离
+        dist_to_tp2_atr = dist_to_tp2 / atr if atr > 0 else 99
+
+        if not has_night:
+            # 无夜盘品种：周五 14:30 代码强平（持仓不过周末）
+            # ---- 方案 B：把 TP2 拉近 ----
+            # tp1_done=True 且已近 TP1 → 保守拉近 0.3 ATR（确保大概率能摸到）
+            # tp1_done=False 或离 TP1 还远 → 拉近 0.5 ATR
+            if tp1_done and dist_to_tp2_atr <= 1.0:
+                offset = 0.3 * atr
+            else:
+                offset = 0.5 * atr
+            raw_tp2_new = cur - offset if direction == "short" else cur + offset
+            tp2_new = round_to_tick(raw_tp2_new, tick)
+            pnl_tp2_new = round(
+                (fill - tp2_new) * mult * lots if direction == "short" else
+                (tp2_new - fill) * mult * lots, 1)
+
+            # 等 14:30 强平的预估：用现价，但盘中可能反抽 ±0.5 ATR
+            pnl_flatten_minus = round(pnl_now - 0.5 * atr * mult * lots, 1)
+            pnl_flatten_plus = round(pnl_now + 0.5 * atr * mult * lots, 1)
+
+            proposals.append({
+                "product": prod, "name": p["name"], "direction": direction,
+                "has_night": False, "tp1_done": tp1_done,
+                "fill": fill, "cur": cur, "atr": atr, "tick": tick,
+                "tp1": tp1, "tp2_orig": tp2_orig, "tp2_new": tp2_new,
+                "dist_to_tp2_atr": round(dist_to_tp2_atr, 1),
+                "pnl_now": pnl_now, "pnl_tp2_new": pnl_tp2_new,
+                "pnl_flatten_minus": pnl_flatten_minus, "pnl_flatten_plus": pnl_flatten_plus,
+                "lots": lots, "mult": mult,
+            })
+        else:
+            # 有夜盘品种：周五夜盘后仍可持有（代码不会强平，周末敞口可控）
+            # ---- 方案 B：TP2 拉近到周五收盘前能摸到的位置（1.0 ATR）----
+            offset = 1.0 * atr
+            raw_tp2_new = cur - offset if direction == "short" else cur + offset
+            tp2_new = round_to_tick(raw_tp2_new, tick)
+            pnl_tp2_new = round(
+                (fill - tp2_new) * mult * lots if direction == "short" else
+                (tp2_new - fill) * mult * lots, 1)
+
+            proposals.append({
+                "product": prod, "name": p["name"], "direction": direction,
+                "has_night": True, "tp1_done": tp1_done,
+                "fill": fill, "cur": cur, "atr": atr, "tick": tick,
+                "tp1": tp1, "tp2_orig": tp2_orig, "tp2_new": tp2_new,
+                "dist_to_tp2_atr": round(dist_to_tp2_atr, 1),
+                "pnl_now": pnl_now, "pnl_tp2_new": pnl_tp2_new,
+                "lots": lots, "mult": mult,
+            })
+    return proposals
+
+
+def render_exit_proposal(cfg, prop, lines):
+    """把 build_friday_exit_proposals 产出的单条指引渲染成 Markdown 段落。"""
+    nm = prop["name"]
+    d = dir_cn(prop["direction"])
+    pnl_now = prop["pnl_now"]
+    pnl_sign = "+" if pnl_now >= 0 else ""
+
+    lines.append("#### **{}（{}）— 现价 {} 元，浮动盈亏 {}{} 元**".format(
+        nm, d, prop["cur"], pnl_sign, round(pnl_now, 1)))
+
+    # 基础信息
+    lines.append("- 开仓价 {}　原 TP2 = {}　现价距原 TP2 = {:.1f} ATR　ATR = {}".format(
+        prop["fill"], prop["tp2_orig"], prop["dist_to_tp2_atr"], round(prop["atr"], 1)))
+    lines.append("- TP1 状态：{}　{}夜盘".format(
+        "✅ 已触发，止损已上移保本" if prop["tp1_done"] else "❌ 未触发，止损仍在初始位",
+        "有" if prop["has_night"] else "**无（周五 14:30 代码强平）**"))
+    lines.append("")
+
+    if not prop["has_night"]:
+        # 无夜盘品种
+        lines.append("**周五 14:30 代码会强平**，以下 3 选 1：")
+        lines.append("")
+        lines.append("**🟢 方案 A（推荐）：现在市价全平 → 锁定 +{:.0f} 元**".format(pnl_now))
+        lines.append("  - 操作：撤掉所有条件单，直接市价全平")
+        lines.append("  - 适用：已接近 TP1，且离原 TP2 太远（>{:.1f} ATR），赌不到".format(prop["dist_to_tp2_atr"]))
+        lines.append("")
+        lines.append("**🟡 方案 B：把 TP2 改到 {}，赌周五能摸到 → 预估 +{:.0f} 元（比现价多赚 {:.0f} 元）**".format(
+            prop["tp2_new"], prop["pnl_tp2_new"], prop["pnl_tp2_new"] - pnl_now))
+        lines.append("  - 操作：撤掉原 TP2 条件单，挂新 TP2 = {}（限价，到价市价）".format(prop["tp2_new"]))
+        lines.append("  - 注意：")
+        if prop["tp1_done"]:
+            lines.append("    - TP1 已触发（止损已上移保本 {}），保本条件单保留，到 TP2 自动平仓".format(prop["fill"]))
+        else:
+            lines.append("    - TP1 还没触发：先别改止损！到 TP1 再手动上移保本")
+        lines.append("    - **如果周五 14:30 仍未摸到 {}，代码会市价强平**，实际收益可能在 [{} ~ {}] 之间".format(
+            prop["tp2_new"],
+            prop["pnl_flatten_minus"], prop["pnl_flatten_plus"]))
+        lines.append("    - 适用：空头/多头动量仍强，且 {} 离现价 < 1 ATR（周五大概率能摸到）".format(prop["tp2_new"]))
+        lines.append("")
+        lines.append("**🔴 方案 C：不改任何条件单，等周五 14:30 代码强平**")
+        lines.append("  - 风险：盘中可能反抽，真实强平价可能比现价差 ±0.5 ATR（约 ±{} 元）".format(
+            round(0.5 * prop["atr"] * prop["mult"] * prop["lots"], 0)))
+        lines.append("  - 收益区间：[{} ~ {}] 元，取决于当天走势".format(
+            prop["pnl_flatten_minus"], prop["pnl_flatten_plus"]))
+        lines.append("")
+    else:
+        # 有夜盘品种
+        lines.append("**周五夜盘后仍可持有（代码不会强平）**，以下 3 选 1：")
+        lines.append("")
+        lines.append("**🟢 方案 A（默认）：不改任何条件单，继续按原 TP2 / 时间止损执行**")
+        lines.append("  - 周五夜盘 + 周一至周四都能继续拿，时间止损（{} 交易日）还有缓冲".format(
+            cfg["exit"]["max_hold_days"]))
+        lines.append("  - 适用：空头/多头趋势未变，原 TP2 = {} 不远".format(prop["tp2_orig"]))
+        lines.append("")
+        lines.append("**🟡 方案 B：TP2 拉近到 {}，保守落袋 → 预估 +{:.0f} 元（比现价多赚 {:.0f} 元）**".format(
+            prop["tp2_new"], prop["pnl_tp2_new"], prop["pnl_tp2_new"] - pnl_now))
+        lines.append("  - 操作：撤掉原 TP2 条件单，挂新 TP2 = {}".format(prop["tp2_new"]))
+        if prop["tp1_done"]:
+            lines.append("    （保本止损 {} 保留）".format(prop["fill"]))
+        lines.append("  - 适用：想让周五收盘前更大概率触达落袋为安")
+        lines.append("")
+        lines.append("**🔴 方案 C：周五 23:10 夜盘复核任务再决策**")
+        lines.append("  - 等周五夜盘开出后看延续性，再决定是改 TP2、还是等周一继续")
+        lines.append("  - 适用：对周五夜盘方向不确定，想等信号")
+        lines.append("")
 
 
 if __name__ == "__main__":
