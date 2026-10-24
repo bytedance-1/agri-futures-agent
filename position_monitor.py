@@ -23,6 +23,14 @@ position_monitor.py —— 持仓监控
 """
 from __future__ import annotations
 
+
+# ---- BOOTSTRAP：确保无论从哪个目录执行，都能找到 common.py 和 json 文件 ----
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+if _HERE not in _sys.path:
+    _sys.path.insert(0, _HERE)
+_os.chdir(_HERE)
+# --------------------------------------------------------------------------
 import math
 import datetime as dt
 

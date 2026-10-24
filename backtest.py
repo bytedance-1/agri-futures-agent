@@ -12,6 +12,14 @@ backtest.py —— 规则回测验证（对比“优化版”与“原始版”�
 """
 from __future__ import annotations
 
+
+# ---- BOOTSTRAP：确保无论从哪个目录执行，都能找到 common.py 和 json 文件 ----
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+if _HERE not in _sys.path:
+    _sys.path.insert(0, _HERE)
+_os.chdir(_HERE)
+# --------------------------------------------------------------------------
 import copy
 import datetime as dt
 import math
