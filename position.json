@@ -4,7 +4,7 @@
     "product": "JD",
     "name": "鸡蛋",
     "direction": "short",
-    "status": "pending",
+    "status": "open",
     "plan_date": "2026-10-27",
     "entry_price": 3266,
     "lots": 1,
@@ -27,6 +27,8 @@
       "close_pos": 0.4,
       "ma20": 3542.75,
       "ma60": 3757.77
-    }
+    },
+    "open_date": "2026-10-27",
+    "fill_price": 3266
   }
 ]
