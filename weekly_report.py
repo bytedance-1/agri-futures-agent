@@ -38,11 +38,13 @@ def dir_cn(d):
 
 
 def last_complete_week(today):
-    """返回「上一个完整周」的起止日期：(周一, 周日)。周一 08:30 跑周报时，上一个完整周是前 7 天内的 Mon-Sun。"""
-    this_week_mon = week_of(today)
-    last_week_mon = this_week_mon - dt.timedelta(days=7)
-    last_week_sun = last_week_mon + dt.timedelta(days=6)
-    return last_week_mon, last_week_sun
+    """返回「统计窗口」的起止日期：(窗口起始日, 今天)。
+    取「最近 7 天」作为周报窗口，而不是「上一个完整 ISO 周」，
+    这样周六 0 点跑的时候，本周刚发生的平仓（如周五止损）不会被遗漏，
+    也不会把补归档的老平仓（如 10 天前）错算进本周。
+    """
+    start = today - dt.timedelta(days=6)
+    return start, today
 
 
 def pct(n, d):
