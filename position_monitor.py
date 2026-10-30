@@ -69,7 +69,8 @@ def fill_of(p):
 
 
 def archive_one(p, close_price, pnl, exit_reason, close_date):
-    """完整离场时把条目归档到 closed_trades.json（挂单未成交也记录为 pnl=0 的失效事件）。"""
+    """完整离场时把条目归档到 closed_trades.json（挂单未成交也记录为 pnl=0 的失效事件）。
+    返回归档记录字典（方便调用方同步 state.last_close）。"""
     record = {
         "id": p["id"],
         "product": p["product"],
@@ -93,6 +94,7 @@ def archive_one(p, close_price, pnl, exit_reason, close_date):
         "note": p.get("note", ""),
     }
     append_closed_trade(record, CLOSED_TRADES_PATH)
+    return record
 
 
 def main():
@@ -296,6 +298,17 @@ def main():
     if changed:
         save_json(POSITION_PATH, keep)
         state["last_monitor_time"] = beijing_now().strftime("%Y-%m-%d %H:%M:%S")
+        # 同步 last_close：取 closed_trades.json 最后一条
+        all_closed = load_json(CLOSED_TRADES_PATH, [])
+        if all_closed:
+            last = all_closed[-1]
+            state["last_close"] = {
+                "id": last.get("id"),
+                "product": last.get("product"),
+                "pnl": last.get("pnl", 0),
+                "close_price": last.get("close_price"),
+                "exit_reason": last.get("exit_reason"),
+            }
         save_json(STATE_PATH, state)
 
     if events:
