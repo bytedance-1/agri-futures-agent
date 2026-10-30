@@ -127,10 +127,11 @@ def load_closed_trades(path=None):
 
 
 def append_closed_trade(trade, path=None):
-    """追加一条平仓记录。trade 必须是 dict，含 id/product/direction 等。"""
+    """追加一条平仓记录（按 close_date 升序插入，保持时间顺序）。"""
     path = path or CLOSED_TRADES_PATH
     arr = load_json(path, [])
     arr.append(trade)
+    arr.sort(key=lambda t: t.get("close_date", ""))
     save_json(path, arr)
 
 

@@ -1,5 +1,36 @@
 [
   {
+    "id": "MA-20261016-L",
+    "product": "MA",
+    "name": "甲醇",
+    "direction": "long",
+    "status": "closed",
+    "entry_price": 3228,
+    "entry_planned": 3224,
+    "open_date": "2026-10-19",
+    "close_date": "2026-10-20",
+    "close_price": 3110,
+    "exit_reason": "stop",
+    "lots": 1,
+    "multiplier": 10,
+    "pnl": -1180.0,
+    "stop_loss": 3110,
+    "tp1": 3405,
+    "tp2": 3523,
+    "tp1_done": false,
+    "created_date": "2026-10-16",
+    "signal": {
+      "vol_ratio": 1.45,
+      "vol_rank": 0.72,
+      "oi_delta": 31510.0,
+      "body_pct": 0.63,
+      "close_pos": 0.6,
+      "ma20": 3060.9,
+      "ma60": 2897.03
+    },
+    "note": "止损离场：10-20 日线 lo=3089 触及止损 3110。归档机制(archive_one/closed_trades.json)在 10-21 才引入，此为补归档。"
+  },
+  {
     "id": "AP-20261016-S",
     "product": "AP",
     "name": "苹果",
