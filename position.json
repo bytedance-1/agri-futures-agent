@@ -1,35 +1,5 @@
 [
   {
-    "id": "RB-20261117-S",
-    "product": "RB",
-    "name": "螺纹钢",
-    "direction": "short",
-    "status": "pending",
-    "plan_date": "2026-11-18",
-    "entry_price": 2959,
-    "lots": 2,
-    "lots_open": 2,
-    "stop_loss": 3002,
-    "initial_stop": 3002,
-    "tp1": 2916,
-    "tp2": 2887,
-    "tp1_done": false,
-    "atr": 28.71,
-    "multiplier": 10,
-    "margin_per_lot": 3550.8,
-    "risk_per_lot": 440.0,
-    "created_date": "2026-11-17",
-    "signal": {
-      "vol_ratio": 1.68,
-      "vol_rank": 1.0,
-      "oi_delta": 176274,
-      "body_pct": 1.56,
-      "close_pos": 0.09,
-      "ma20": 3031.75,
-      "ma60": 3079.05
-    }
-  },
-  {
     "id": "PK-20261116-S",
     "product": "PK",
     "name": "花生",
