@@ -74,6 +74,7 @@ def main():
             occupied_groups.add(g)
 
     results = []   # (product, signal|None, reason)
+    bars_by_prod = {}   # 保存每个品种的 bars，供 market_observation 用
     signals = []
     for prod in products:
         sym = cfg["products"][prod]["sina"]
@@ -90,6 +91,7 @@ def main():
                     "low": q["low"], "close": q["last"],
                     "volume": q["volume"], "oi": q["oi"], "settle": 0.0,
                 })
+            bars_by_prod[prod] = bars
             sig, reason = build_signal(cfg, prod, bars)
             results.append((prod, sig, reason))
             if sig:
@@ -166,13 +168,15 @@ def main():
     exit_proposals = build_friday_exit_proposals(cfg, open_positions, rt) \
         if (today_d.weekday() == 3 and open_positions) else []
 
-    md = build_markdown(cfg, today, plan_date, results, selected, active, exit_proposals)
+    md = build_markdown(cfg, today, plan_date, results, selected, active,
+                        exit_proposals, bars_by_prod, rt)
     title = "【期货组合】盘后信号 {} 生成{}条挂单".format(today, len(selected))
     push(title, md, cfg)
     print(md)
 
 
-def build_markdown(cfg, today, plan_date, results, selected, active, exit_proposals=None):
+def build_markdown(cfg, today, plan_date, results, selected, active,
+                   exit_proposals=None, bars_by_prod=None, rt=None):
     exit_proposals = exit_proposals or []
     lines = []
     lines.append("**信号日期**：{}　**挂单交易日**：{}".format(today, plan_date))
@@ -297,8 +301,148 @@ def build_markdown(cfg, today, plan_date, results, selected, active, exit_propos
             lines.append("- {}：未通过 —— {}".format(nm, reason))
 
     lines.append("")
+
+    # ---- 无信号且无持仓 → 追加市场观察（帮助理解"为什么没机会"+ 下次信号可能在哪）----
+    if not selected and not active and bars_by_prod and rt:
+        obs = build_market_observation(cfg, results, bars_by_prod, rt)
+        if obs:
+            lines.append("### {} 🔎 市场观察（无信号/无持仓时自动分析）".format(
+                "五" if exit_proposals else "四"))
+            lines.extend(obs)
+            lines.append("")
+
     lines.append("> 风险提示：本信号为机械规则计算结果，不构成投资建议。请自行确认仓位与风险。")
     return "\n".join(lines)
+
+
+# ============================================================
+# 无信号/无持仓时：市场观察（帮助理解"为什么没机会" + 下次信号可能在哪）
+# ============================================================
+def build_market_observation(cfg, results, bars_by_prod, rt):
+    """
+    当今天没有任何新信号、且 position.json 里也没有 pending/open 持仓时，
+    生成一段"市场画像 + 差一点通过的品种 TOP3 + 方向性判断"。
+    目的：让用户知道今天为什么没机会、哪几个品种最值得盯、以及本周整体处于什么状态。
+    """
+    from common import sma, pct_rank
+
+    f = cfg["filters"]
+    lines = []
+
+    vol_ratios = []
+    vol_ranks = []
+    close_above_ma20 = []
+    near_miss = []   # (prod, nm, vol_ratio, vol_rank, pass_rate, reason)
+    direction_hints = []
+
+    for prod, sig, reason in results:
+        if prod not in bars_by_prod:
+            continue
+        bars = bars_by_prod[prod]
+        if len(bars) < 21:
+            continue
+        t = bars[-1]
+        closes = [b["close"] for b in bars]
+        vols = [b["volume"] for b in bars]
+        vol_ma20 = sma(vols[-(f["vol_ma_period"] + 1):-1])
+        vol_ratio = t["volume"] / vol_ma20 if vol_ma20 > 0 else 0.0
+        vol_rank = pct_rank(t["volume"], vols[-60:])
+        ma20 = sma(closes[-f["ma_period"]:])
+
+        vol_ratios.append(vol_ratio)
+        vol_ranks.append(vol_rank)
+        close_above_ma20.append(t["close"] > ma20)
+
+        # 差一点通过：量能接近阈值（≥85%）但最后还是没过
+        if not sig:
+            pass_rate = min(vol_ratio / f["vol_mult"],
+                            vol_rank / f["vol_pct_rank_min"])
+            if pass_rate >= 0.85:
+                near_miss.append({
+                    "prod": prod,
+                    "nm": cfg["products"][prod]["name"],
+                    "vol_ratio": vol_ratio,
+                    "vol_rank": vol_rank,
+                    "pass_rate": pass_rate,
+                    "reason": reason,
+                })
+
+        # 方向性提示：量比够（≥1.0）时看 MA20 位置
+        if vol_ratio >= 1.0:
+            direction_hints.append({
+                "prod": prod,
+                "nm": cfg["products"][prod]["name"],
+                "above": t["close"] > ma20,
+                "vol_ratio": vol_ratio,
+            })
+
+    n_total = len(vol_ratios)
+    if n_total == 0:
+        return []
+
+    # --- 1. 今日量能全景 ---
+    gte_15 = sum(1 for v in vol_ratios if v >= 1.5)
+    gte_12 = sum(1 for v in vol_ratios if v >= 1.2)
+    gte_10 = sum(1 for v in vol_ratios if v >= 1.0)
+    below_10 = n_total - gte_10
+    above_ma20 = sum(close_above_ma20)
+
+    lines.append("**① 今日量能全景**")
+    lines.append("量比分布：≥1.5({})　≥1.2({})　≥1.0({})　<1.0({})；MA20上方 {}/{} 个品种".format(
+        gte_15, gte_12, gte_10, below_10, above_ma20, n_total))
+
+    # 定性
+    if gte_12 <= 1 and above_ma20 <= 3:
+        lines.append("→ **今日整体观望期**：量能普遍偏弱，价格多数在 MA20 下方，趋势信号难以触发。")
+    elif gte_12 >= 4:
+        lines.append("→ **今日有结构性机会**：多品种量能放大，但可能因其他过滤项未完全达标。")
+    else:
+        lines.append("→ **今日弱震荡期**：部分品种有苗头但整体量能不足，信号概率偏低。")
+
+    lines.append("")
+
+    # --- 2. 差一点通过 TOP3 ---
+    if near_miss:
+        near_miss.sort(key=lambda x: x["pass_rate"], reverse=True)
+        lines.append("**② 最接近信号的品种 TOP{}**（量能已够但卡其他过滤项，明日量能若放大就可能出信号）".format(
+            min(3, len(near_miss))))
+        for m in near_miss[:3]:
+            lines.append("- {}({})：量比{:.2f}（阈值{}，{:.0%}）；卡点 → {}".format(
+                m["nm"], m["prod"],
+                m["vol_ratio"], f["vol_mult"], m["vol_ratio"] / f["vol_mult"],
+                m["reason"]))
+        lines.append("")
+
+    # --- 3. 方向性判断 ---
+    if direction_hints:
+        longs = [h for h in direction_hints if h["above"]]
+        shorts = [h for h in direction_hints if not h["above"]]
+        lines.append("**③ 方向性观察**（今日量比≥1.0 的品种里，MA20 上方 {} 个、下方 {} 个）".format(
+            len(longs), len(shorts)))
+        if longs and not shorts:
+            lines.append("→ **多头倾向明确**：{} 均站上 MA20，若量能继续放大，多头信号概率更高。".format(
+                "、".join(h["nm"] for h in longs)))
+        elif shorts and not longs:
+            lines.append("→ **空头倾向明确**：{} 均在 MA20 下方，若量能继续放大，空头信号概率更高。".format(
+                "、".join(h["nm"] for h in shorts)))
+        elif longs and shorts:
+            lines.append("→ **方向分化明显**：多头（{}）vs 空头（{}），今日更像板块轮动而非单边行情。".format(
+                "、".join(h["nm"] for h in longs),
+                "、".join(h["nm"] for h in shorts)))
+        lines.append("")
+
+    # --- 4. 下周展望 ---
+    gte_10_ratio = gte_10 / n_total
+    if gte_10_ratio < 0.4:
+        lines.append("**④ 下周展望**：今日 ≤40% 品种量比≥1.0，组合规则偏趋势跟随，低量能环境下大概率继续观望。若本周已连续 3+ 天量能低迷，考虑降低交易频率以节省算力和监控精力。")
+    elif near_miss and near_miss[0]["pass_rate"] >= 0.95:
+        nm = near_miss[0]["nm"]
+        lines.append("**④ 下周展望**：{} 今天量能几乎达标（{:.0%}），仅差 {}，是下周最值得盯的候选。".format(
+            nm, near_miss[0]["pass_rate"], near_miss[0]["reason"].split(" —— ", 1)[-1] if "——" in near_miss[0]["reason"] else near_miss[0]["reason"]))
+    else:
+        lines.append("**④ 下周展望**：今天量能中性偏淡，信号概率偏低。关注本周后续量能是否恢复——若周内累计 ≥2 个交易日量比≥1.2 的品种数 ≥3，下周信号概率显著回升。")
+
+    return lines
 
 
 # ============================================================
