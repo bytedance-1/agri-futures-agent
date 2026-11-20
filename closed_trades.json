@@ -93,5 +93,37 @@
       "ma60": 3757.77
     },
     "note": "止损离场：10-30 当日 high=3494 触及止损 3404。GitHub Actions monitor 已设 cooldown=11-01，但 closed_trades.json 未被 commit（workflow git add 遗漏），此为补归档。"
+  },
+  {
+    "id": "PK-20261116-S",
+    "product": "PK",
+    "name": "花生",
+    "direction": "short",
+    "entry_price": 7686,
+    "exit_price": 7690,
+    "lots": 1,
+    "multiplier": 5,
+    "open_date": "2026-11-17",
+    "close_date": "2026-11-20",
+    "created_date": "2026-11-16",
+    "pnl": -26.0,
+    "commission": 6.0,
+    "gross_pnl": -20,
+    "exit_reason": "manual",
+    "stop_loss": 7804,
+    "tp1": 7568,
+    "tp2": 7490,
+    "atr": 78.69,
+    "margin_per_lot": 4611.6,
+    "signal": {
+      "vol_ratio": 1.62,
+      "vol_rank": 0.83,
+      "oi_delta": 36259,
+      "body_pct": 1.1,
+      "close_pos": 0.15,
+      "ma20": 7815.2,
+      "ma60": 7914.7
+    },
+    "note": "用户手动平仓于 7690，PnL=-26.0"
   }
 ]
