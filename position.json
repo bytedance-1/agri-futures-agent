@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "id": "PK-20261123-S",
+    "product": "PK",
+    "name": "花生",
+    "direction": "short",
+    "status": "pending",
+    "plan_date": "2026-11-24",
+    "entry_price": 7526.0,
+    "lots": 1,
+    "lots_open": 1,
+    "stop_loss": 7650.94,
+    "initial_stop": 7650.94,
+    "tp1": 7401.06,
+    "tp2": 7317.76,
+    "tp1_done": false,
+    "atr": 83.3,
+    "multiplier": 5,
+    "margin_per_lot": 4515.6,
+    "risk_per_lot": 634.7,
+    "created_date": "2026-11-23",
+    "signal": {
+      "vol_ratio": 1.46,
+      "vol_rank": 0.87,
+      "oi_delta": 16154.0,
+      "body_pct": 1.49,
+      "close_pos": 0.07,
+      "ma20": 7777.0,
+      "ma60": 7874.13
+    }
+  }
+]
