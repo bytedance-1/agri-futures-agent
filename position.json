@@ -4,7 +4,7 @@
     "product": "PK",
     "name": "花生",
     "direction": "short",
-    "status": "pending",
+    "status": "cancelled",
     "plan_date": "2026-11-24",
     "entry_price": 7526.0,
     "lots": 1,
@@ -27,6 +27,8 @@
       "close_pos": 0.07,
       "ma20": 7777.0,
       "ma60": 7874.13
-    }
+    },
+    "cancel_date": "2026-11-24",
+    "cancel_reason": "挂单当日(11-24)未触发成交，按规则自动作废；当日量比萎缩至0.81，下跌动能衰减"
   }
 ]
