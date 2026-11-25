@@ -30,5 +30,35 @@
     },
     "cancel_date": "2026-11-24",
     "cancel_reason": "挂单当日(11-24)未触发成交，按规则自动作废；当日量比萎缩至0.81，下跌动能衰减"
+  },
+  {
+    "id": "PK-20261125-S",
+    "product": "PK",
+    "name": "花生",
+    "direction": "short",
+    "status": "pending",
+    "plan_date": "2026-11-26",
+    "entry_price": 7426.0,
+    "lots": 1,
+    "lots_open": 1,
+    "stop_loss": 7550.2,
+    "initial_stop": 7550.2,
+    "tp1": 7301.8,
+    "tp2": 7219.0,
+    "tp1_done": false,
+    "atr": 82.8,
+    "multiplier": 5,
+    "margin_per_lot": 4455.6,
+    "risk_per_lot": 631.0,
+    "created_date": "2026-11-25",
+    "signal": {
+      "vol_ratio": 1.44,
+      "vol_rank": 0.87,
+      "oi_delta": 16105.0,
+      "body_pct": 1.51,
+      "close_pos": 0.05,
+      "ma20": 7744.3,
+      "ma60": 7855.2
+    }
   }
 ]
