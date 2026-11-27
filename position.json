@@ -30,5 +30,35 @@
     },
     "cancel_date": "2026-11-24",
     "cancel_reason": "挂单当日(11-24)未触发成交，按规则自动作废；当日量比萎缩至0.81，下跌动能衰减"
+  },
+  {
+    "id": "SM-20261127-L",
+    "product": "SM",
+    "name": "锰硅",
+    "direction": "long",
+    "status": "pending",
+    "plan_date": "2026-11-30",
+    "entry_price": 5982.0,
+    "lots": 1,
+    "lots_open": 1,
+    "stop_loss": 5875.69,
+    "initial_stop": 5875.69,
+    "tp1": 6088.31,
+    "tp2": 6159.18,
+    "tp1_done": false,
+    "atr": 70.87,
+    "multiplier": 5,
+    "margin_per_lot": 3589.2,
+    "risk_per_lot": 541.6,
+    "created_date": "2026-11-27",
+    "signal": {
+      "vol_ratio": 1.69,
+      "vol_rank": 0.85,
+      "oi_delta": 12993.0,
+      "body_pct": 0.92,
+      "close_pos": 0.65,
+      "ma20": 5826.3,
+      "ma60": 5866.0
+    }
   }
 ]
