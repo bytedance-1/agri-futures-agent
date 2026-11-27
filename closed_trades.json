@@ -125,5 +125,35 @@
       "ma60": 7914.7
     },
     "note": "用户手动平仓于 7690，PnL=-26.0"
+  },
+  {
+    "id": "PK-20261125-S",
+    "product": "PK",
+    "name": "花生",
+    "direction": "short",
+    "status": "closed",
+    "entry_price": 7426.0,
+    "entry_planned": 7426.0,
+    "open_date": "2026-11-26",
+    "close_date": "2026-11-27",
+    "close_price": 7582.0,
+    "exit_reason": "expired",
+    "lots": 1,
+    "multiplier": 5,
+    "pnl": 0.0,
+    "stop_loss": 7550.2,
+    "tp1": 7301.8,
+    "tp2": 7219.0,
+    "created_date": "2026-11-25",
+    "signal": {
+      "vol_ratio": 1.44,
+      "vol_rank": 0.87,
+      "oi_delta": 16105.0,
+      "body_pct": 1.51,
+      "close_pos": 0.05,
+      "ma20": 7744.3,
+      "ma60": 7855.2
+    },
+    "note": ""
   }
 ]
